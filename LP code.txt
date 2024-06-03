@@ -1,0 +1,917 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
+#include <math.h>
+#include <SybLib.h>
+#include <MiscLib.h>
+#include <Misc.h>
+#include <LpLib.h>
+
+#define SM STR 256
+#define DBL NA -99999.0
+#define INT NA -9999
+#define MAX LOANS 5000000
+#define MAX DEALS 10000
+#define BKT CNT 7
+#define FICO BKT CNT 18
+#define LTV BKT CNT 7
+#define PRODTYPE CNT 8
+#define MAX GR 300
+#define OPT ARG START 1
+#define DOC TYPE FULL '1'
+#define OCC TYPE OWN '1'
+#define LOSS 0
+#define CHG_OFF 1
+#define SEV 2
+#define MIN_YR 1993
+#define MAX_YRS 28 /* provide ventors out to 2020 */
+#define UNIV 0
+#define FIXED 1
+#define ARM 2
+
+#define SUBPRIME 1
+#define PRIME 2
+#define ALT_A "ALT A"
+#define BC "BC"
+#define WB_PRIME "PRIME"
+#define LP_SHELF_PRIME "MBS"
+#define LP_SHELF_ALT_A "ALT A"
+#define LP_SHELF_SUBPRIME "BC"
+
+typedef struct {
+double TotOBal;
+double TotCBal;
+int TotLoanCnt;
+int DfltCnt;
+double TotLoss;
+double TotWtdFico;
+double TotWtdLtv;
+} BKT_TYPE;
+
+typedef struct {
+double OBal;
+double CBal;
+int OFico;
+double OLtv;
+} LOAN TYPE;
+
+typedef struct {
+char DealId[6];
+char CollatGrp[4];
+char ProdType [10];
+double Del60P:
+double CumLoss:
+double FullDoc;
+double Owner0cc;
+double DocFull;
+double Occown;
+} DEAL TYPE;
+
+typedef struct {
+double Lower;
+double Upper;
+} RANGE TYPE;
+
+typedef struct {
+double Lower;
+double Upper;
+) FICO_BKT_TYPE;
+
+typedef struct {
+double Lower;
+double Upper;
+double TotOBal;
+double TotWtdFico:
+int LoanCnt;
+} FICO TYPE;
+
+typedef struct {
+int IssYr;
+int LoanCnt:
+double TotOBal;
+FICO TYPE Ficos [BKT_CNT];
+}ISSYR_FICO_TYPE:
+
+static int ProcAggr( DBPROCESS *, int, char *, char, int, int, int, char);
+static int ProcAggrold (DBPROCESS *);
+static void DoAggrStats (DBPROCESS*, int, char *, char *, int, double, double);
+static int proc_stats by crgrade (DBPROCESS *);
+static int ProcDealAggr (DBPROCESS, DBPROCESS,int, char);
+static void DoAggrDealStats (DBPROCESS, int, char, char, int );
+
+static int ProcLtvDflts(char*, int );
+static int ProcLossCohortMatrix (DBPROCESS, int, int);
+static int ProcAggrDel60HistAsof (DBPROCESS, int, int );
+static int ProcFicoLtvHistAsof(DBPROCESS, int );
+static int proc_doctype_loss_cohorts(char, char*);
+static int proc crgrade loss cohorts (char*);
+static int ProcArmsByIndex (DBPROCESS);
+static int ProcDealCurrLtv( DBPROCESS, DBPROCESS);
+static int GetHpiData(DBPROCESS, char*, DATETYPE, DATETYPE,double, double);
+static int SqlExec(DBPROCESS, char*);
+static DATETYPE GetMaxLpHist (DBPROCESS *dbproc);
+static int parse_cmd_line(char * []);
+static void prt_usage(char* );
+
+static char dbserver [SM STR] = ""; //"MCIBITEXP001";
+static char dbuser[SM STR] ""; //"fiadbo";
+static char dbpasswd[SM_STR] = ""; //"Wach2008";
+static char dbdbname [SM_STR] "LoanPerf";
+
+/*
+static ISSYR FICO TYPE FicosByYr[2] = {
+
+{ 1994, 0, 0.0, {
+{ -100000.0, 0.0, 0.0, 0.0, 0), 
+{ 0.0, 580.0, 0.0, 0.0, 0), 
+[ 580.0, 620.0, 0.0, 0.0, 0), 
+(620.0, 660.0, 0.0, 0.0, 0), 
+[ 660.0, 700.0, 0.0, 0.0, 0),
+ { 700.0, 740.0, 0.0, 0.0, 0), 
+ ( 740.0, 1000.0, 0.0, 0.0, 0 } }.
+1, { 2004, 0, 0.0, 1
+(-100000.0, 0.0, 0.0, 0.0, 0),
+ (0.0, 580.0, 0.0, 0.0, 0 }, 
+ { 580.0, 620.0, 0.0, 0.0, 0),
+ { 620.0, 660.0, 0.0, 0.0, 0), 
+ [ 660.0, 700.0, 0.0, 0.0, 0), 
+ € 700.0, 740.0, 0.0, 0.0, 01,
+ { 740.0, 1000.0, 0.0, 0.0, 0 } }
+};
+
+
+
+static RANGE_TYPE FicoRange [FICO_BKT_CNT] = 
+( (0.0,480.0 ),
+(480.0,500.0), 
+(780.0,800.0 ), 
+(800.0,10000.0
+};
+*/
+
+static DEAL TYPE DealVec [MAX_DEALS]:
+static LOAN TYPE LoanVec [MAX LOANS];
+static BKT TYPE FicoBkts [FICO BKT CNT];
+static BKT TYPE LtvBkts [LTV BKT CNT);
+static DATETYPE MaxLpAsOf;
+
+static DATETYPE today;
+static int most recent = 1;
+static int Debug = 0;
+static int ListObs = 0;
+static int SubPrimeFlag = SUBPRIME;
+static DBPROCESS *dbproc;
+static DBPROCESS *dbproc2;
+static char dbinterfacesfile [SM_STR] = "";
+
+static int setEnvironment (void);
+static int isDebug(void);
+
+void main(int argc, char *argv[])
+{
+int i1;
+int yr;
+int CurrYr:
+SYB_LOGIN_ARGS dblogin_args;
+
+/*yyyymmo1 YYYYMM01 (atoi (date("Ymd"))); */ 
+today = atoi(date("%Y%m%d"));
+CurrYr = atoi(date("%Y"));
+
+///
+// Set environment//
+//
+setEnvironment();
+
+if(parse_cmd_line(&(argv[OPT_ARG_START]) ) ) {
+prt_usage(argv[0]);
+exit(ERR EXIT);
+}
+dblogin_args.server dbserver;
+dblogin args.user dbuser;
+dblogin args.passwd = dbpasswd;
+dblogin_args.appl = argv[0];
+dblogin args.host = NULL;
+dblogin_args.err_fn = NULL;
+dblogin_args.msg_fn = NULL;
+if(Debug )
+dblogin_args.logfilename "sql.log";
+else
+dblogin_args.logfilename=NULL;
+
+if ( strlen (dbinterfacesfile))
+dblogin_args. IntFile = dbinterfacesfile;
+else
+dblogin_args. IntFile = NULL;
+
+//dblogin_args. IntFile = "/home/intexdev/interfaces";
+dblogin_args.bcp_enable = FALSE;
+dbproc = syb_login(dblogin_args);
+dbproc2 syb_login(dblogin args);
+if(!dbproc || !dbproc) {
+printf("%s: Failed to login to Sybase server.\n", argv[0]); 
+exit(ERREXIT);
+}
+dbuse (dbproc, dbdbname); 
+dbuse (dbproc2, dbdbname);
+
+printf( "Server: %s\n", dbserver);
+printf( "Database: %s\n", dbdbname);
+/* MaxLpAsOf GetMaxLpHist (dbproc); */
+
+//SqlExec(dbproc, "truncate table LpDeskAggrs");
+for(yr-2003; yr<CurrYr; yr++) {
+ProcAggr(dbproc, yr, LP_SHELF_PRIME, 'A', 0, 0, 59, "ARM < 5/1");
+ProcAggr(dbproc, yr, LP_SHELF_ALT_A, 'A', 0, 0, 59, "ARM < 5/1" );
+ProcAggr(dbproc, yr, LP SHELF SUBPRIME, 'A', 0, 0, 59, "ARM < 5/1");
+ProcAggr(dbproc, yr, LP SHELF PRIME, 'A', 0, 60, 60, "ARM 5/1");
+ProcAggr(dbproc, yr, LP SHELF ALT A, 'A', 0, 60, 60, "ARM 5/1"); 
+ProcAggr(dbproc, yr, LP SHELF SUBPRIME, 'A', 0, 60, 60, "ARM 5/1");
+ProcAgar(dbproc. yr. LP SHELF_PRIME. 'A'. 0. 84. 84. "ARM 7/1" )
+ProcAgar(dbproc, yr. LP_SHELF_ALT_A. 'A'. 0. 84. 84. "ARM 7/1" )
+ProcAggr(dbproc, yr, LP SHELF SUBPRIME, 'A', 0, 84, 84, "ARM 7/1");
+
+ProcAggr (dbproc, yr, LP_SHELF_PRIME, 'A', 0, 120, 120, "ARM 10/1"); 
+ProcAggr(dbproc, yr, LP SHELF ALTA, 'A', 0, 120, 120, "ARM 10/1"); 
+ProcAggr(dbproc, yr, LP SHELF SUBPRIME, 'A', 0, 120, 120, "ARM 10/1"); 
+ProcAggr(dbproc, yr, LP SHELF PRIME, 'A', 1, INT NA, INT_NA, "Option ARM");
+ProcAggr (dbproc, yr, LP_SHELF_ALT_A, 'A', 1, INT_NA, INT_NA, "Option ARM");
+ProcAggr (dbproc, yr, LP_SHELF_SUBPRIME, 'A', 1, INT_NA, INT_NA, "Option ARM");
+ProcAggr(dbproc, yr, LP_SHELF_PRIME, 'F', 0, INT_NA, INT_NA, " Fixed"); 
+ProcAggr(dbproc, yr, LP SHELF ALT A, 'F', 0, INT NA, INT NA, "Fixed");
+ProcAggr(dbproc, yr, LP SHELF SUBPRIME, 'F', O, INT NA, INT_NA, "Fixed");
+}
+
+1*This section must appear after calls to ProcAggr in section above 
+because ProcAggr does the insert of LpDeskäggrs 
+
+rows that ProcDealAggr then updates.*/
+for(yr-2003; yr<CurrYr; yr++) {
+ProcDealAggr (dbproc, dbproc2, yr, LP_SHELF_SUBPRIME);
+ProcDealAggr(dbproc, dbproc2, yr, LP SHELF ALT A);
+ProcDealAggr (dbproc, dbproc2, yr, LP SHELF PRIME);
+}
+
+
+
+dbexit();
+exit(0);
+}
+
+
+
+static int
+ProcAggr (DBPROCESS *dbproc, int Vint, char *CrGr, char CpnType, int Negām, int InitResetBeg, int InitResetEnd, char *ProdType)
+{
+int dbcol:
+int i1:
+int Cnt:
+double TotCbal;
+double De160P;
+/*
+double AgeDel (MAX AGE] [MAX YRS]; 
+double AgeCurrBal [MAX AGE] [MAX YRS];
+*/
+
+DBCHAR db DealId[SM_STR];
+DBCHAR db CrGrade [SM_STR];
+DBCHAR db_CpnType;
+DBCHAR db CanNegam;
+DBFLT8 db_CurrBal;
+DBCHAR db OtsDeling:
+DBINT db OrigFico;
+DBFLTS db OrigLtv;
+
+dbfcmd(dbproc, "select ");
+dbfcmd(dbproc, "11.CpnType, isnull(lc.CurrBal, 0.0), lc.OtsDeling, ");
+dbfcmd(dbproc, "11.OrigFico, ll. OrigLtv, isnull(ll. CanNegAm,'")");
+dbfcmd(dbproc, "from LoanPerf..StageLpDeals ld, ");
+dbfcmd(dbproc, "LoanPerf..StageLpCollatGrps 1g, ");
+//dbfcmd(dbproc, "LoanPerf..LpHelLoans 11, ");
+//dbfcmd(dbproc, "LoanPerf..LpDeskCurrs ic");
+dbfcmd(dbproc, "LoanPerf..StageLpHelLoans l1 left outer join LoanPerf..StageLpDeskCurrs ic on lc on 
+lc.DealId=l1.DealId and lc.LpLoanId=l1.LpLoanId");
+if( CpnType == 'A')
+	{ dbfcmd(dbproc, ", LoanPerf. StageLpHelArmLoans la " ):
+}
+
+dbfcmd(dbproc, "where");
+dbfcmd(dbproc, "ld.OrigSettleDate is not null");
+dbfcmd(dbproc, "and year (ld. OrigSettleDate)='%d'", Vint);
+dbfcmd(dbproc, "and lg. DealId=ld. DealId");
+dbfcmd(dbproc, "and 1g.CrGradeRaw='s' ", CrGr);
+dbfcmd(dbproc, "and 11. DealId=lg. DealId and ll. CollatGrp=lg.CollatGrp");
+dbfcmd(dbproc, "and 11. CpnType 'c' ", CpnType);
+//dbfcmd(dbproc, "and ic. DealId=*11. DealId and lc.LpLoanId=*11. LpLoanId");
+if( CpnType == 'A') {
+if(NegAm)
+dbfcmd(dbproc, "and 11. CanNegAm='1'");
+else
+dbfcmd(dbproc, "and 11. CanNegAm='0' ");
+dbfcmd(dbproc, "and la. DealId=11. DealId and la. LpLoanId=11.LpLoanId");
+if ( InitResetBeg! INT NA && InitResetEnd != INT NA ) (
+dbfcmd(dbproc, "and la. InitRateResetMos between id and id ", InitReset Beg, InitResetEnd);
+}
+}
+if(dbsqlexec(dbproc) SUCCEED) (
+dbcancel(dbproc):
+return(0);
+}
+dbresults(dbproc):
+if(! DBROWS(dbproc )){
+dbcancel(dbproc);
+return(0);
+}
+
+memset(&LoanVec[0],'\0', sizeof( LoanVec));
+Cnt 0:
+TotCbal 0.0:
+De160P 0.0;
+dbcol 1:
+dbbind( dbproc, dbcol++, CHARBIND, 0, (BYTE *) &db_CpnType);
+dbbind(dbproc, dbcol++, FLTSBIND, 0, ; (BYTE) &db CurrBal);
+dbbind(dbproc, dbcol++, CHARBIND, 0, (BYTE *) &db OtsDelinq ); 
+dbbind(dbproc, dbcol++, INTBIND, 0, (BYTE *) &db OrigFico);
+dbbind(dbproc, dbcol++, FLTSBIND, O, (BYTE) &db_OrigLtv); 
+dbbind(dbproc, dbcol++, CHARBIND, 0, (BYTE *) &db CanNegAm);
+while(dbnextrow (dbproc ) != NO MORE ROWS) {
+LoanVec [Cnt].CBal = db CurrBal;
+LoanVec[Cnt].OFico = db OrigFico;
+LoanVec[Cnt].OLtv = db_OrigLtv;
+switch( db OtsDeling) {
+case '6':
+Del60P + db CurrBal;
+break;
+case '9':
+De160P + db CurrBal;
+break;
+case 'F' :
+Del60P + db CurrBal;
+break;
+case 'R':
+De160P + db CurrBal:
+break;
+default :
+break;
+}
+TotCbal = TotCbal + db CurrBal; 
+Cnt++;
+if( Cnt >= MAX LOANS) {
+printf("Max loan count exceeded\n");
+exit/ 11:
+}
+}
+if( Cnt > 0 && TotCbal > 0.0) {
+DoAggrStats (dbproc2, Vint, CrGr, ProdType, Cnt, De160P, TotCbal);
+}
+dbcancel(dbproc);
+}
+
+
+
+static void DoAggrStats (DBPROCESS *dbproc, int Yr, char *CrGr, char *ProdType, int Cnt, double Del60P, double TotCbal)
+{
+int il;
+char tmp[SM STR);
+double AvgFico;
+double AvgLtv;
+double VarFico;
+double VarLtv;
+int MaxFico;
+int MinFico;
+double MaxLtv;
+double MinLtv;
+
+AvgFico =AvgLtv =MaxLty = 0.0;
+MaxFico = 0;
+MinLtv 9999.0;
+MinFico - 9999;
+for(11-0; il<Cnt; il++) {
+AvgFico + =LoanVec[il].OFico:
+AvgLtv + =LoanVec[11].OLtv;
+if(LoanVec[il].OFico >0){
+MaxFico = MAX(MaxFico, LoanVec[il].OFico);
+MinFico= MIN(MinFico, LoanVec[il].OFico);
+}
+if( LoanVec[il].OLtv > 0.0) {
+MaxLtv = MAX(MaxLtv, LoanVec[il].OLtv );
+MinLtv MIN( MinLtv, LoanVec[il].OLtv);
+}
+}
+AvgFico AvgFico/Cnt;
+AvgLtv AvgLtv / Cnt;
+VarFico VarLtv = 0.0;
+for( il=0; il<Cnt; il++) {
+VarFico += pow( (AvgFico -LoanVec[il].OFico), 2.0);
+VarLtv += pow((AvgLtv LoanVec[il].OLtv ), 2.0);
+}
+VarFico VarFico/Cnt;
+VarLtv Varlty/Cnt;
+printf( "%4d %-5s %s %d %6.2f 6.2f %6.2f %6.2f\n",
+Yr, CrGr, ProdType, Cnt,
+AvgFico, pow( VarFico, 0.5),
+AvgLtv, pow( VarLtv, 0.5));
+sprintf(tmp, "insert StageLpDeskAggrs "
+"(Vintage, CrGradeLp, ProdType, LoanCnt,"
+"FicoMean, FicoSdev, FicoMin, FicoMax, " 
+"LtvMean, LtvSdev, LtvMin, LtvMax) "
+"values (id, 's', 's', td,.2f,%.2f, d, d, 2f, .2f, .2f, .2f)",
+Yr, CrGr, ProdType, Cnt, 
+AvgFico, pow(VarFico, 0.5), MinFico, MaxFico,
+ AvgLtv, pow(VarLty, 0.5), MinLtv, MaxLtv
+ );
+SqlExec(dbproc, tmp);
+}
+
+
+
+static int 
+ProcDealAggr (DBPROCESS *dbproc, DBPROCESS *dbproc2, int Vint, char *CrGr)
+{
+int dbcol;
+int il;
+int Cnt;
+int DealCnt;
+char ProdType [SM_STR];
+double TotObal;
+double TotCbal;
+double TotLosses:
+double De160P;
+double TotFixed:
+double TotArm;
+double TotLt5lArm;
+double Tot51Arm;
+double Tot7lArm;
+double  Totl0lArm;
+double TotOtherArm;
+double TotNegAm;
+
+DBCHAR db_DealId[SM_STR];
+DBCHAR db CollatGrp[SM_STR];
+DBCHAR db CpnType;
+DBCHAR db_CanNegAm;
+DBINT db InitRateResetMos;
+DBFLT8 db OrigBal;
+DBFLT8 db CurrBal;
+DBFLT8 db Loss;
+DBCHAR db OtsDeling;
+DBCHAR db DocType;
+DBCHAR db OccType:--
+
+/* Load DealVec with all groups for vintage and credit grade */ 
+memset(&DealVec[0],'\0', sizeof( DealVec));
+dbfcmd(dbproc, "select 12. DealId, 12. CollatGrp");
+dbfcmd(dbproc, "from LoanPerf.. StageLpDeals ld, LoanPerf. LpDataCov2 12"); 
+dbfcmd(dbproc, "where year (ld.OrigSettleDate)=\d ", Vint);
+dbfcmd(dbproc, "and 12. DealId=ld.DealId and 12.CrGradeLp='s' ", CrGr ); 
+dbfcmd(dbproc, "order by 12. DealId, 12. CollatGrp");
+if(dbsqlexec(dbproc) != SUCCEED ) {
+dbcancel (dbproc);
+return(0);
+}
+dbresults (dbproc);
+if(! DBROWS(dbproc )){
+dbcancel (dbproc);
+return(0);
+}
+dbcol 1;
+DealCnt = 0;
+dbbind(dbproc, dbcol++, STRINGBIND, 0, (BYTE *) db_DealId );
+dbbind(dbproc, dbcol++, STRINGBIND, 0, (BYTE *) db_CollatGrp);
+while(dbnextrow (dbproc) != NO MORE ROWS){
+	( strcpy( DealVec [DealCnt]. DealId, db_DealId);
+strcpy( DealVec [DealCnt].CollatGrp, db_CollatGrp);
+DealCnt++;
+if(DealCnt >= MAX DEALS) {
+printf( "Max Deal count exceeded\n" );
+exit(1);
+}
+}
+dbcancel(dbproc);
+
+/* For each group, determine product type, 60+ deling, and cum loss,*/
+ for(11-0: 11<DealCnt: 11++){
+/* Select all deal/groups for vintage and credit grade */
+dbfcmd(dbproc, "select ");
+dbfcmd(dbproc, "11. CpnType, 11. OrigBal, isnull(lc. CurrBal,0.0), ");
+dbfcmd(dbproc, "isnull(11. Loss, 0.0), lc. OtsDelinq, ");
+dbfcmd(dbproc, "isnull(11. CanNegAm , ''), isnull(la. InitRateResetMos, 0), "); 
+dbfcmd(dbproc, "isnull(11. DocType,' '), isnull(11. OccТуре,' ')");
+dbfcmd(dbproc, "from");
+dbfcmd(dbproc, "LoanPerf. StageLpHelLoans ll left outer join LoanPerf..StageLpDeskCurrs lc on lc. DealId= 11. DealId and lc. LpLoanId=11.LpLoanId");
+dbfcmd(dbproc, "left outer join LoanPerf..StageLpHelArmLoans la on la.DealId=11. DealId and la. LpLoanId=11.LpLoanId ");
+//dbfcmd(dbproc, "LoanPerf. LpHelLoans 11, ");
+//dbfcmd(dbproc, "LoanPerf. LpDeskCurrs 1c, ");
+//dbfcmd(dbproc, "LoanPerf. LpHelArmLoans la ");
+dbfcmd(dbproc, "where");
+dbfcmd(dbproc, "11. DealId='s' and 11.CollatGrp='%s'", DealVec[il]. DealId, DealVec[il]. CollatGrp);
+//dbfcmd(dbproc, "and 1c. DealId=*11. DealId and lc.LpLoanId=*ll.LpLoanId"); 
+//dbfcmd(dbproc, "and la. DealId=*11.DealId and la. LpLoanId=*11. LpLoanId");
+if(dbsqlexec (dbproc) != SUCCEED) { 
+dbcancel (dbproc);
+return(0);
+}
+dbresults(dbproc); 
+if(! DBROWS(dbproc ) ){
+dbcancel(dbproc); 
+return(0);
+}
+
+Cnt = 0;
+TotObal = 0.0;
+TotCbal = 0.0;
+TotLosses = 0.0;
+De160P 0.0;
+TotFixed = 0.0;
+TotArm= 0.0;
+TotLt51Arm = 0.0;
+Tot51Arm = 0.0;
+Tot71Arm 0.0;
+Totl0lArm = 0.0;
+TotOtherArm = 0.0;
+TotNegAm = 0.0;
+dbcol = 1;
+dbbind(dbproc, dbcol++, CHARBIND, 0, (BYTE) &db_CpnType);
+dbbind(dbproc, dbcol++, FLT8BIND, 0, (BYTE *) &db_OrigBal);
+dbbind(dbproc, dbcol++, FLT8BIND, 0, (BYTE *) &db CurrBal);
+dbbind(dbproc, dbcol++, FLT8BIND, 0,  (BYTE *) &db_Loss);
+dbbind(dbproc, dbcol++, CHARBIND, 0, (BYTE *) &db OtsDeling )
+dbbind(dbproc, dbcol++, CHARBIND, 0, ; (BYTE *) &db_CanNegAm);
+dbbind(dbproc, dbcol++, INTBIND, 0, (BYTE *) &db_InitRateResetMos);
+dbbind(dbproc, dbcol++, CHARBIND, 0,(BYTE *) &db DocType );
+dbbind(dbproc, dbcol++, CHARBIND, 0, (BYTE *) &db_OccType);
+while (dbnextrow (dbproc) != NO MORE ROWS) {
+Cnt++;
+TotObal += db OrigBal;
+TotCbal += db CurrBal;
+TotLosses += db Loss;
+if(db CpnType == 'A') {
+TotArm += db CurrBal;
+if(db InitRateResetMos < 60 )
+TotLt5lArm += db CurrBal;
+else if(db InitRateResetMos ==60)
+Tot51Arm += db CurrBal; 
+else if ( db InitRateResetMos == 84 )
+Tot7lArm += db CurrBal;
+else if(db InitRateResetMos ==120 ) 
+Tot101Arm += db CurrBal;
+else
+TotOtherArm += db CurrBal;
+}
+if(db CanNegAm == '1')
+TotNegAm + db CurrBal;
+} else {
+TotFixed += db_CurrBal;
+switch(db OtsDeling) {
+case '6':
+De160P + db CurrBal:
+break;
+case '9':
+De160P += db_CurrBal;
+break;
+case 'F':
+De160P + db CurrBal;
+break;
+case 'R':
+Del60P + db CurrBal;
+break;
+default :
+break;
+}
+if(db DocType=DOC_TYPE_FULL) 
+	DealVec[il].DocFull + db_CurrBal; 
+if db OccTvDe OCC TYPE OWN)
+DealVec[il].OccOwn += db_CurrBal;
+}
+if( Cnt > 0 && TotCbal > 0.0) {
+	if( Tot Fixed > TotArm) {
+strcpy( ProdType, "Fixed");
+} else {
+if( TotNegAm / TotCbal >= .50)
+strcpy( ProdType, "Option ARM");
+else if( TotLt5lArm Tot5lArm && TotLt51Arm Tot71Arm && TotLt5lArm > Totl0lArm)
+strcpy( ProdType, "ARM < 5/1");
+else if( Tot5lArm TotLt51Arm && Tot5lArm > Tot7lArm && Tot5iArm Totl01Arm) 
+	strcpy( ProdType, "ARM 5/1");
+else if( Tot7lArm TotLt5lArm && Tot71Arm Tot5lArm && Tot7lArm > Tot101Arm)
+strcpy( ProdType, "ARM 7/1");
+else if( Tot101Arm > TotLt5lArm && Totl0lArm Tot5lArm && Tot101Arm > Tot7lArm)
+strcpy( ProdType, "ARM 10/1");
+else
+strcpy( ProdType, "Other" );
+}
+strcpy( DealVec [il]. ProdType, ProdType);
+if( TotCbal > 0 )
+DealVec[il]. Del60P De160P / TotCbal 100.0; 
+if(TotObal > 0)
+DealVec [il].CumLoss TotLosses / TotObal 100.0;
+DealVec[il). DocFull DealVec[il]. DocFull / TotCbal 100.0:
+DealVec [il].OccOwn DealVec[il].OccOwn /TotCbal 100.0;
+printf("%d;%s;%s;45;45;4d;8.2f;8.2f%2f%2f%2f;8.2f;.2f;.2f%2f;.2f:4.2f;.2f;.2ft.2f;t.2f\n",
+Vint, CrGr, DealVec[il]. DealId, DealVec[il].CollatGrp,
+ProdType, Cnt, TotCbal, TotFixed, TotArm,
+TotLt5lArm, Tot5lArm, Tot7lArm, Tot101Arm,
+TotOtherArm, TotNegAm, 
+De160P, De160P / TotCbal 100.0,
+TotLosses, TotLosses / TotObal 100.0,
+DealVecfill. DocFull. DealVecfill.Occown );
+}
+}
+DoAggrDealStats (dbproc2, Vint, CrGr, "Fixed", DealCnt);
+DoAggrDealStats (dbproc2, Vint, CrGr, "ARM < 5/1", DealCnt );
+DoAggrDealStats (dbproc2, Vint, CrGr, "ARM 5/1", DealCnt);
+DoAggrDealStats (dbproc2, Vint, CrGr, "ARM 7/1", DealCnt )
+DoAggrDealStats (dbproc2, Vint, CrGr, : "ARM 10/1", DealCnt);
+DoAggrDealStats (dbproc2, Vint, CrGr, "Option ARM", DealCnt );
+dbcancel(dbproc):
+}
+
+static void DoAggrDealStats (DBPROCESS dbproc, int Yr, char *CrGr, char *ProdType, int DealCnt )
+{
+int il;
+int ProdCnt;
+char tmp[SM STR];
+double AvgDel;
+double AvgLoss;
+double AvgDoc;
+double Avgocc;
+double VarDel;
+double VarLoss:
+double VarDoc;
+double Varocc;
+double MaxDel;
+double MinDel;
+double MaxLoss;
+double MinLoss:
+double MaxDoc;
+double MinDoc:
+double MaxOcc;
+double Minocc;
+
+/* for ProdType passed in, determine count and other stats */
+Avg Del = AvgLoss= AvgDoc= AvgOcc = 0.0;
+MaxLoss=MaxDel MaxDoc = MaxOcc = 0.0;
+MinLoss = MinDel = MinDoc - Min0cc = 9999.0;
+ProdCnt = 0;
+for(11=0; il<DealCnt; il++) {
+if(!strcmp(DealVec[il]. ProdType, ProdType ) ) {
+ProdCnt++;
+AvgDel + =DealVec [il], Del60P;
+AvgLoss +=DealVec[il].CumLoss;
+AvgDoc + =DealVec[il].DocFull;
+AvgOcc + =DealVec[il].Occown;
+MaxDel= MAX (MaxDel, DealVec[il].Del60P);
+MinDel= MIN(MinDel, DealVec[il] Del60P);
+MaxLoss MinLoss MAX(MaxLoss, DealVec[il]. CumLoss); 
+MIN(MinLoss, DealVec[il]. CumLoss);
+MaxDoc = MAX(MaxDoc, DealVec[il]. DocFull);
+MinDoc - MIN(MinDoc, DealVec[il]. DocFull ):
+ MaxOcc = MAX(MaxOcc, DealVec[il].OccOwn):
+Minocc MIN(Minocc, DealVec[il].OccOwn );
+}
+}
+if(ProdCnt > 0) {
+AvgDel = AvgDel / ProdCnt;
+AvgLoss = AvgLoss / ProdCnt;
+AvgDoc= AvgDoc / ProdCnt;
+AvgOcc =AvgOcc / ProdCnt;
+VarDel=VarLoss = VarDoc =VarOcc = 0.0;
+for(11-0: 11<DealCnt; il++) {
+if(!strcmp( DealVec[il]. ProdType, ProdType)) {
+VarDel += pow( (AvgDel DealVec[il]. Del60P), 2.0); 
+VarLoss += pow( (AvgLoss DealVec[il]. CumLoss), 2.0);
+VarDoc += pow( (AvgDoc  DealVec[il].OccOwn), 2.0);
+ Varocc += pow( (AvgOcc DealVec[il]. DocFull), 2.0);
+}
+}
+VarDel VarDel / ProdCnt;
+VarLoss VarLoss / ProdCnt;
+VarDoc VarDoc / ProdCnt;
+Varocc VarOcc / ProdCnt;
+printf("$4d -5s is td 6.2 6.2f 6.2 6.2f 6.2f 16.2f $6.2 6.2f\n",
+Yr, CrGr, ProdType, ProdCnt, AvgDel, pow( VarDel, 0.5), A
+vgLoss, pow( VarLoss, 0.5),
+AvgDoc, pow(VarDoc, 0.5),
+AvgOcc, pow(VarOcc, 0.5));
+sprintf(tmp, "update StageLpDeskäggrs set DealCnt=\d, "
+"Del60PMean=%.2f, Del60PSdev-%.2f, Del60PMin-%.2f, Del60PMax=%.2f"
+"where Vintage-id and CrGradeLp='s' and ProdType='%s'",
+ProdCnt, AvgDel, pow(VarDel, 0.5), MinDel, MaxDel,
+Yr, CrGr, ProdType
+);
+SqlExec(dbproc, tmp);
+sprintf(tmp, "update StageLpDeskAggrs set "
+"CumLossMean=%.2f, CumLossSdev-%.2f, CumLossMin-%.2f, CumLossMax-%.2f"
+"where Vintage-id and CrGradeLp='s' and ProdType='s' ",
+AvgLoss, pow( VarLoss, 0.5), MinLoss, MaxLoss,
+Yr, CrGr, ProdType
+);
+SqlExec(dbproc, tmp);
+sprintf(tmp, "update StageLpDeskäggrs set "
+"FullDocMean-%.2f. FullDocSdev-%.2f. FullDocMin-1.2f. FullDocMax-.2f"
+"where Vintage-id and CrGradeLp='s' and ProdType='%s' ", 
+AvgDoc, pow( VarDoc, 0.5), MinDoc, MaxDoc
+Yr, CrGr, ProdType
+);
+SqlExec(dbproc, tmp);
+sprintf(tmp, "update StageLpDeskäggra set " 
+OccOwnerMean-1.2f, OccOwnerSdev=1.2f, OccOwnerMin=%.2f, OccOwnerMax=1.2f"
+"where Vintage-id and CrGradeLp='s' and ProdType='s',
+AvgOcc, pow( VarOcc, 0.5), MinOcc, Махосс,
+Yr, CrGr, ProdType;
+};
+SqlExec(dbproc, tmp):
+}
+}
+
+static int SqlExec(DBPROCESS dbproc, char *qry);
+{
+int dbcol:
+int 11:
+
+dbfcmd(dbproc, "%s", qry);
+if(dbsqlexec(dbproc)! SUCCEED) {
+dbcancel (dbproc):
+return(0);
+}
+dbresults(dbproc):
+if(! DBROWS(dbproc )){
+dbcancel(dbproc):
+return(0);
+}
+dbcancel dboroc ):
+}
+
+static DATETYPE GetMaxLpHist (DBPROCESS *dbproc)
+{
+int dbcol;
+DBINT db_MaxAsOfDate;
+
+/*
+dbcmd(dbproc, "select convert (int, convert (char,max (AsOfDate), 112))"); 
+dbcmd (dbproc, "from LpHelLoanHist with (nolock) ");
+*/
+dbcmd(dbproc, "select convert (int, convert (char, CurrHistAsOfDate, 112)) from LpDbStatus");
+ if(dbsqlexec(dbproc) != SUCCEED) {
+printf( "LpDbStatus select failed\n" );
+exit(1);
+}
+dbresults (dbproc);{
+if(DBROWS(dbproc ) ) {
+dbcol = 1;
+dbbind(dbproc, dbcol++, INTBIND, 0, (BYTE *) &db_MaxAsOfDate ); 
+while( dbnextrow (dbproc) != NO MORE ROWS) {
+} 
+}else {
+dbcancel (dbproc);
+return(0);
+}
+dbcancel (dbproc);
+return( db MaxAsOfDate );
+}
+
+
+static void prt_usage(char *name)
+{
+printf( "Usage: s [-DPSUcdilm]\n", name);
+printf(" Where:\n");
+printf("-1 List detailed data\n");
+printf("-cCollatType\n");
+printf(" -dDealId\n");
+printf(" -pPrime (subprime is the default)\n");
+printf("-uPrime/Subprime (subprime is the default)\n");
+printf(" -Ddatabase\n");
+printf(" printf( -Ppassword\n");
+printf("-Sdbserver\n");
+printf(" -Udbuser\n" );
+}I
+
+static int parse cmd line (char *argv[])
+{
+while(argv) {
+if((*argv) [0] == '_') {
+switch( (*argv) [1] ){
+	/*
+case 'a':
+strcpy( Qry.ShelfCrType, LP_SHELF_ALT_A);
+SubPrimeFlag = UNIV;
+Qry.LpService UNIV;
+break;
+SubPrimeFlag = PRIME:
+-+
+case 'p':
+SubPrime Flag PRIME;
+Qry.LpService PRIME; break;
+case 'u':
+SubPrimeFlag = UNIV;
+Qry.LpService UNIV:
+break;
+*/
+case 'g':
+Debug 1:
+break;
+case 'l':
+ListObs = 1;
+break;
+case 'D':
+strcpy( dbdbname, $((*argv)[2]));
+break;
+case 'P' :
+strcpy( dbpasswd, &((*argv) [2]));
+break;
+case 'S' :
+strcpy( dbserver, &((*argv)[2]));
+break;
+case 'U':
+strcpy(dbuser, &((*argv)[2]));
+break;
+default :
+/*long atol (&((*argv) [2])); */ 
+return(1);
+}
+}
+argv++;
+}
+return(0);
+}
+
+static int setEnvironment (void)
+{
+char sysEnvironment [SM STR1:
+
+strcpy(sysEnvironment, (getenv("SYS") ? getenv("SYS"): "DEV" ) );
+if(!strcmp(sysEnvironment, "PROD"))
+{
+if( getenv("PROD DB SERVER"))
+maxcpy(dbserver, getenv("PROD DB SERVER_LP"), SM_STR);
+ if(getenv("PROD DB USER"))
+maxcpy(dbuser, getenv("PROD DB USER LP"), SM_STR);
+if(getenv("PROD_DB_PASSWD"))
+	maxcpy(dbpasswd, getenv("PROD_DB_PASSWD_LP"), SM_STR);
+if(getenv("PROD DB NAME"))
+	maxcpy( dbdbname, getenv("PROD_DB_NAME_LP"), SM_STR);
+}
+else if (!strcmp(sysEnvironment, "QA"))
+{
+if(getenv("QA_DB_SERVER"))
+maxcpy( dbserver, getenv("QA_DB_SERVER_LP"), SM_STR);
+if(getenv("QA DB_USER")) 
+	maxcpy(dbuser, getenv("QA DB USER_LP"), SM_STR);
+if(getenv( "QA_DB_PASSWD"))
+maxcpy(dbpasswd, getenv( "QA_DB_PASSWD_LP"), SM_STR); 
+if(getenv("QA DB NAME"))
+maxcpy(dbdbname, getenv("QA_DB_NAME_LP"), SM_STR);
+}
+else if (!strcmp(sysEnvironment, "UAT"))
+{
+if(getenv( "UAT_DB_SERVER"))
+maxcpy( dbserver, getenv("UAT_DB_SERVER_LP"), SM_STR); 
+if(getenv("UAT DB USER"))
+maxcpy(dbuser, getenv( "UAT_DB_USER_LP"), SM_STR); 
+if(getenv("UAT DB PASSWD"))
+maxcpy(dbpasswd, getenv( "UAT_DB_PASSWD_LP"), SM_STR);
+ if(getenv("UAT DB NAME" ))
+maxcpy( dbdbname, getenv("UAT_DB_NAME_LP"), SM_STR);
+}
+else
+{
+if(getenv("DEV_DB_SERVER"))
+maxcpy( dbserver, getenv( "DEV_DB_SERVER_LP"), SM_STR); 
+if(getenv( "DEV DB USER"))
+maxcpy( dbuser, getenv( "DEV_DB_USER_LP"), SM_STR);
+ if(getenv("DEV DB PASSWD"))
+maxcpy(dbpasswd, getenv( "DEV DB PASSWD LP"), SM_STR);
+ if(getenv("DEV DB NAME"))
+maxcpy( dbdbname, getenv( "DEV DB NAME LP"), SM STR);
+}
+
+if(getenv( "INT FILE"))
+maxcpy(dbinterfacesfile, getenv( "INT FILE"), SM_STR);
+
+// dbname is LoanPerf
+maxcpy( dbdbname, "LoanPerf", SM_STR);
+
+
+if (isDebug())
+{
+printf("System Environment: %s\n\n", sysEnvironment); printf ( "interface file: \s\n", dbinterfacesfile);
+printf( "dbserver: ts\n", dbserver 1;
+printf("interface file: %s\n", dbinterfacesfile );
+printf("dbserver: %s\n", dbserver);
+printf("dbuser: %s\n", dbuser);
+printf("dbpasswd: %s\n", dbpasswd); printf("dbdbname: %s\n", dbdbname);
+}
+}
+
+static int isDebug (void)
+{
+int isdebug FALSE;
+char debugEnv[SM STR);
+
+strcpy(debugEnv, (getenv("DEBUG") ? getenv("DEBUG"): "TRUE"));
+
+isdebug (!strcmp(debugEnv, "TRUE")) ? TRUE FALSE;
+
+return isdebug;
+}
